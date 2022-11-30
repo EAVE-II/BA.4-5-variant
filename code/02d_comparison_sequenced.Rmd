@@ -1,0 +1,89 @@
+---
+title: Comparison of Population, Positive Cases and Sequenced from 01 November 2021 
+author: "Steven Kerr, Chris Robertson"
+date: ' `r format(Sys.Date(), "%d %B %Y")` '
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Libraries
+library(plyr)
+library(tidyverse)
+library(survival)
+library(finalfit)
+library(knitr)
+library(rmarkdown)
+library(flextable)
+
+Location = '/conf/'
+
+setwd(paste0(Location, 'EAVE/GPanalysis/progs/CR/Variants_Sequencing'))
+
+######### 1 Load data #######
+
+output_list <- readRDS("./output/temp/output_list_analysis.rds") 
+
+
+source('./00_functions.R')
+
+```
+
+## Introduction
+
+The main analyis in this report is based upon all patients who tested positive in Scotland from `r format(output_list$a_begin, "%d %b %Y")` to `r format(output_list$a_end, "%d %b %Y")`.  For individuals with a sequenced sample the positive test sequenced is used.  For individuals without a sequenced sample the first positive test result after the beginning of the study is used.  
+
+The variant takes one of the values: delta, omicron_ba1, omicron_ba2, omicron_xe, omicron_ba4 or omicron_ba5 and is based on sequencing information only.
+
+The testing data and viral sequencing data are linked to the EAVE study data of GP clincial conditions.  Sequencing data are available up to `r format(output_list$a_end_wgs, "%d %b %Y")`
+
+Vaccination status is defined at the date the of the positive PCR test.  It is coded as unvaccinated (uv), one dose (v1), with 2 dose groups - 0-24 weeks post second dose (v2_0:24), 25 or more weeks post second dose (v2_20+).  For those with a dose 3/dose 4 or booster the categories are similarly defined in terms of weeks post dose 3 or dose 4.  In the descriptive tables, 'vs' is the vaccination status variable.
+
+lab = lh means test was done in a lighthouse lab; most sequenced tests come from the NHS labs and lfd tests are not sequenced. 
+
+## Descriptives
+
+### Population, Positive Cases and Sequenced Cases
+
+Only cases and sequenced cases who link into the EAVE-II data cohort are used.  This table shows that over the whole period there is a reasonabale agreement between those cases sequenced and those testing positive.  Slightly more females test positive and are sequenced than in the population and the 20-39 age group has more positive cases, relatively.
+
+```{r table_pop, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- read_csv(paste0("./output/comparison_table_population.csv"))
+z$Characteristic <- replace_na(z$Characteristic, '') 
+
+#mytable(summary_tbl_sg)
+kableExtra::kbl(z, 
+        caption = "Numbers and percentages", 
+        align = c("l", "l", "r", "r", "r") ) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+```
+
+### Positive Cases and Sequenced Cases in two periods
+
+Only cases and sequenced cases who link into the EAVE-II data cohort are used.  Period 1 is from the beginning of the study up until 31 March 2022 and the second period is from 01 April 2022 until the end of the study
+
+This table shows differences over the two periods  In the later period more females are positive and sequenced, fewer children and more vaccinated individuals and fewer with no risk groups.  Even though the sequenced samples are pcr tests there is reasonable agreement between the positive cases and sequenced cases in both periods.
+
+```{r table_period, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- read_csv(paste0("./output/comparison_table_pos_seq.csv"))
+z$Characteristic <- replace_na(z$Characteristic, '') 
+
+#mytable(summary_tbl_sg)
+kableExtra::kbl(z, 
+        caption = "Numbers and percentages", 
+        align = c("l", "l", "r", "r", "r") ) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+```
+
+
+
+

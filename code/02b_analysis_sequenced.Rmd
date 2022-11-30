@@ -1,0 +1,659 @@
+---
+title: All Sequenced Cases from (01/04/2021) - Description, Hospitalisation Risks
+author: "Steven Kerr, Chris Robertson"
+date: ' `r format(Sys.Date(), "%d %B %Y")` '
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Libraries
+library(plyr)
+library(tidyverse)
+library(survival)
+library(finalfit)
+library(knitr)
+library(rmarkdown)
+library(flextable)
+
+Location = '/conf/'
+
+setwd(paste0(Location, 'EAVE/GPanalysis/progs/CR/Variants_Sequencing'))
+
+######### 1 Load data #######
+
+df_pos <- readRDS("./output/temp/All_positive_analysis.rds") 
+output_list <- readRDS("./output/temp/output_list_analysis.rds") 
+
+
+# Create a combine variant, vaccination status column for pyears calculations
+#df_seq <- mutate(df_seq, variant_vs = as.factor(paste(variant, vs, sep = '_')))
+
+
+rgs <- colnames(df_pos)[startsWith(colnames(df_pos), "Q")]
+
+# Start date is the first AY4.2 case
+a_end_death <- max(df_pos$NRS.Date.Death, na.rm=T) 
+
+
+source('./00_functions.R')
+
+```
+
+## Introduction
+
+The main analyis in this report is based upon all patients who tested positive in Scotland from `r format(output_list$a_begin_analysis, "%d %b %Y")` to `r format(output_list$a_end, "%d %b %Y")`.  The analysis of hospitalisations does not use the last date of admission to hospital from SMR01 but uses a date before that - `r format(output_list$a_end_hosp_expected, "%d %b %Y")` when there are sufficient numbers to carry out the analysis, though after the date when SMR01 would appear to be complete -  `r format(output_list$a_end_smr01, "%d %b %Y")`. The analysis of deaths uses the latest date of death - `r format(a_end_death, "%d %b %Y")`.  For individuals with a sequenced sample the positive test sequenced is used.  For individuals without a sequenced sample the first positive test result after the beginning of the study is used.  Some individuals will have tested positive prior to the start of the study and the number of days from the last positive test prior to the study start is recorded.
+
+A covid admission to hospital is taken to be individuals who have a confirmed covid admission to hospital - either as the main cause of admission (95%) or covid mentioned if one of the other reasons for admission (5%) and the admission was with 28 days of the specimen - the vast majoirty are admitted on the day the same is taken. Also included are patients who were already in hospital and then tested positive, more than 2 days post admission.  The latter group are not included in the analysis of the risk of hospital admission from the community with covid as they are already in hospital. 
+
+The variant takes one of the values: omicron_ba2, omicron_ba4 or omicron_ba5 and is based on sequencing information only.
+
+The testing data and viral sequencing data are linked to the EAVE study data of GP clincial conditions.  Sequencing data are available up to `r format(output_list$a_end_wgs, "%d %b %Y")`
+
+Hospital admission is derived from the SMR01 database only.  This database records admissions to hospital and for many patients there are repeat admissions within a short space of time.  The first covid admissions following the positive test is used.  There is a lag in this information being available and the 
+
+Vaccination status is defined at the date the of the positive PCR test.  It is coded as unvaccinated (uv), one dose (v1), with 2 dose groups - 0-24 weeks post second dose (v2_0:24), 25 or more weeks post second dose (v2_20+).  For those with a dose 3/dose 4 or booster the categories are similarly defined in terms of weeks post dose 3 or dose 4.  In the descriptive tables, 'vs' is the vaccination status variable.
+
+lab = lh means test was done in a lighthouse lab; most sequenced tests come from the NHS labs and lfd tests are not sequenced. 
+
+Cox proportional hazard models are used to estimate the risk of hospitalisation and covid death following a sequenced positive covid test result. 'ba2' is the reference category for variant, and 'unvaccinated' is the reference category for vaccination status.
+
+
+## Descriptives
+
+### Sequenced Cases by Variant
+
+Only ba2/ba4/ba5 cases who link into the EAVE-II data cohort
+
+```{r table_variant, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- read_csv(paste0("./output/summary_table_variant.csv"))
+z$Characteristic <- replace_na(z$Characteristic, '') 
+
+#mytable(summary_tbl_sg)
+kableExtra::kbl(z, 
+        caption = "Numbers and percentages of all sequenced by variant", 
+        align = c("l", "l", "r", "r", "r") ) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+```
+
+## Logistic Regressions BA4 and BA5 versus BA2
+
+This analysis mimics one by PHE where an attempt is made to assess the impact of vaccination status at the time the positive test is taken on the odds of being BA4 relative to BA2 and BA5 relative to BA2.  The analysis only uses positive tests from `r format(output_list$a_begin_analysis, "%d %b %Y")` to `r format(output_list$a_end_wgs, "%d %b %Y")` which have been sequenced and the sequence is one of BA2, BA4, BA5.  The explantory variables considered are age group, sex, deprivation, number of co-morbid Q Covid risk groups, the lab the sample was processed at - lighthouse (lh) for community testing and nhs for hospital testing.  Also included is time period (days_gp) - periods of length 2 weeks from the beginning of the study apart from week_2 and week_6 which are 4 weeks long, and previously positive status, as well as vaccine status (vs).
+
+### BA5 versus BA2
+
+```{r glm_ba5, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- readRDS(paste0("./output/ba5_glm.RDS"))
+z_anova <- readRDS(paste0("./output/ba5_glm_vs_anova.RDS"))
+z_p <- z_anova$`Pr(>Chi)`[2]
+#z_tab <- gtsummary::tbl_regression(z, exponentiate=TRUE) %>% 
+#  gtsummary::add_n(location="level") %>% gtsummary::add_nevent(location="level")
+#print(z_tab)
+z_tab_kable <- readRDS(paste0("./output/ba5_glm_tab.RDS"))
+
+```
+
+#### Table of logistic regression odds ratios and numbers of events
+
+```{r tab_glm_ba5, echo=FALSE, results="asis"}
+
+z_tab_kable %>% kableExtra::column_spec(5, width = "10em") %>% print()
+
+
+cat("\n\n")
+```
+
+
+This analysis shows that adjusting for all the explanatory variables there is limited evidence of an association between vaccine status and the odds of being BA5, Chi Square test on `r z_anova$Df[2]` degrees of freedom, p = `r round(z_p,4)`. While the odds of being BA5 as opposed to BA4 for the dose 4 group shortly after vaccination (v4_0:1) is greater that the reference group - 26+ weeks after dose 3 (v3_26+) this is not the case for longer durations post dose 4.  This suggests that dose 4 does not give additional protection against BA5 relative to BA2.  The dominant variable is the temporal trend representing the growth of BA5 in Scotland.  There is evidence of waning protection from previous confirmed infections, but little impact of age group, sex, deprivation and number of co morbid contitions on being BA5 compared to BA2.  The testing laboratory is important and this probably reflects the oversampling of cases for sequencing from the hospital laboratories.
+
+
+### BA4 versus BA2
+
+```{r glm_ba4, echo=FALSE, warning=FALSE, message = FALSE, results="hold"}
+
+z <- readRDS(paste0("./output/ba4_glm.RDS"))
+#z1 <-  readRDS(paste0("./output/ba4_glm_vs.RDS"))
+z_anova <- readRDS(paste0("./output/ba4_glm_vs_anova.RDS"))
+z_p <- z_anova$`Pr(>Chi)`[2]
+#z_tab <- gtsummary::tbl_regression(z, exponentiate=TRUE) %>% 
+#  gtsummary::add_n(location="level") %>% gtsummary::add_nevent(location="level") 
+z_tab_kable <- readRDS(paste0("./output/ba4_glm_tab.RDS"))
+
+```
+
+#### Table of logistic regression odds ratios and numbers of events
+
+
+```{r, tab_glm_ba4, echo=FALSE, results="asis"}
+z_tab_kable %>% kableExtra::column_spec(5, width = "10em") %>% print()
+
+cat("\n\n")
+
+```
+
+
+This analysis shows that adjusting for all the explanatory variables there is no association between vaccine status and the odds of being BA4, Chi Square test on `r z_anova$Df[2]` degrees of freedom, p = `r round(z_p,4)`.  The dominant variable is the temporal trend representing the growth of BA4 in Scotland.  The interpretation of the table of odds ratios is similar to that for BA5.
+
+
+## Confirmed Covid Hospital Admission with 28 days of a positive test
+
+
+### Covid Hospitalisations all who tested positive by variant
+
+Individuals were not in hospital at the time of sequenced test. event is a conformed covid admission to hospital, pyears gives the total follow up time in years. n is the number of individuals and rate_100 is the event rate per 100 person years follow up.
+
+```{r table_hosp_variant, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant.csv"))
+kableExtra::kbl(z_tab, 
+        caption = "Person years and numbers of covid hospitalisations by variant", 
+        align = c("l", "r", "r", "r"), digits=c(NA, 0,0,0,1) ) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+```
+
+###Time to hospital admission by variant
+
+Individuals are not in hospital at the time of test.  They also link into the EAVE study.
+
+```{r graph_cuminc_variant, echo=FALSE, warning=FALSE, message = FALSE}
+
+knitr::include_graphics("./output/cuminc_variant.png")
+
+```
+
+
+### Hospitalisation Rates by age group and variant
+
+Individuals are not in hospital at the time of test.They also link into the EAVE study.
+
+```{r table_hosp_variant_age, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant_age.csv"))
+z_tab <- z_tab %>% dplyr::select(-x, -pt, -rate, - conf.level)
+kableExtra::kbl(z_tab, 
+        caption = "Person years, numbers and rate of covid hospitalisations by S Gene status", 
+        align = c("l","l", rep("r",6)), digits=c(NA,NA,1,0, 0,2,2,2),
+        col.names = c("S Gene", "Age Group","Person Years", "N","Hospital Admissions",
+                      "Rate per 100 person years","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+```
+
+###Rate of hospital admission by Variant and Age Group
+
+Individuals are not in hospital at the time of test. They also link into the EAVE study.
+
+```{r graph_rate_variant_age, echo=FALSE, warning=FALSE, message = FALSE}
+
+knitr::include_graphics("./output/rate_variant_age.png")
+
+```
+
+## Expected Hopitalisations
+
+### Expected ba4 and ba5 confirmed Covid Hospitalisations among those who are sequenced
+
+Individuals were not in hospital at the time of test.  
+
+The expected numbers of hospitalisations were calculated by fitting a cox proportional hazards regression model to the ba2 cases only in the study period using predictors of age group, gender, deprivation, previous positive history, number of co-morbid Q Covid conditions, vaccine status, dose and duration, and a temporal trend in 2 week periods (labelled weeks in table).  The expected number of cases is derived from the predictions of expected survival from the model in all cases.  Hence the expected number of hospitalisations in the ba2 variant group will match the observed.  Confidence intervals are derived from Byar's method. 
+
+The table below is based upon the same selection criteria used to select the cases to fit the model. Namely not in hospital at the time of test; linking into the EAVE-II study for risk group and deprivation status.
+
+```{r table_hosp_variant_exp, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant_exp_hosp_eave.csv"))
+kableExtra::kbl(z_tab, 
+        caption = "Person years, numbers and expected numbers of covid hospitalisations by variant", 
+        align = c("l", rep("r",7)), digits=c(NA,0, 1,0, 1,2,2,2),
+        col.names = c("S Gene","N","Person Years","Hospital Admissions","Expected Admissions",
+                      "Obs/Exp","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+```
+
+
+
+### Details of the Cox Model
+
+```{r cox_model, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- readRDS("./output/coxph_model_ba2.rds")
+z1 <- summary(z)$conf.int %>% as.data.frame()
+colnames(z1) <- c("hr","x","lcl","ucl")
+z1 <- z1 %>% mutate(names=rownames(z1)) %>% filter(!grepl("ps\\(", names)) %>% 
+  filter(!is.na(hr)) %>% dplyr::select(-x) %>% dplyr::relocate(names, .before=hr)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 cases only", 
+        align = c("l", rep("r",3)), digits=c(NA,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+knitr::include_graphics("./output/coxph_model_ba2.png")
+
+```
+
+
+
+## Direct comparison of BA5 with BA2
+
+Individuals were not in hospital at the time of test.  
+
+A cox proportional hazards regression model was fit to the BA2 and BA5 cases only in the study period from 14 April to `r format(output_list$a_end_hosp_expected, "%d %b %Y")` using predictors of age group, gender, deprivation, previous positive history, number of co-morbid Q Covid conditions, vaccine status, dose and duration, and a temporal trend in 2 week periods (labelled weeks in table).  
+
+The same selection criteria is used as in the observed expected analysis but over a shorter time period when both BA2 and BA5 were circulating and hospital admission data is leikely to be complete. Namely not in hospital at the time of test; linking into the EAVE-II study for risk group and deprivation status.
+
+### Details of the Cox Model comparing BA5 with BA2
+
+This is an additive model which assumes that the vaccine has the same impact on BA2 as on BA5.  The results suggest that BA5 is about 50% more severe than BA2 but the confidence interval just encompases 1 and is relatively imprecisely estimated 
+
+```{r cox_model_ba2_ba5, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- readRDS("./output/coxph_model_ba2_ba5.rds")
+z1 <- summary(z)$conf.int %>% as.data.frame()
+colnames(z1) <- c("hr","x","lcl","ucl")
+z1 <- z1 %>% mutate(names=rownames(z1)) %>% filter(!grepl("ps\\(", names)) %>% 
+  filter(!is.na(hr)) %>% dplyr::select(-x) %>% dplyr::relocate(names, .before=hr)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 and BA5 cases only", 
+        align = c("l", rep("r",3)), digits=c(NA,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+knitr::include_graphics("./output/coxph_model_ba2_ba5.png")
+
+z_anova <- readRDS(paste0("./output/coxph_model_ba2_ba5_vs_interaction.rds"))
+z_p <- z_anova$`P(>|Chi|)`[2]
+
+```
+
+### Details of the Cox Model comparing the vaccine effects in BA5 with BA2
+
+This is an interaction model which assumes that the vaccine has the a different impact on BA5 compared to BA2.  The results suggest that among the unvaccinated BA5 is about 3 times more severe than BA2 but the confidence interval is wide and is relatively imprecisely estimated.  There is no significant interaction, p=`r round(z_p,3)`, but the trend in the estimates suggests that the protection from dose 4 is at least maintained against BA5 compared to BA2. 
+
+```{r cox_model_ba2_ba5_vs, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- readRDS("./output/coxph_model_ba2_ba5_vs.rds")
+z1 <- summary(z)$conf.int %>% as.data.frame()
+colnames(z1) <- c("hr","x","lcl","ucl")
+z1 <- z1 %>% mutate(names=rownames(z1)) %>% filter(!grepl("ps\\(", names)) %>% 
+  filter(!is.na(hr)) %>% dplyr::select(-x) %>% dplyr::relocate(names, .before=hr)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 and BA5 cases only", 
+        align = c("l", rep("r",3)), digits=c(NA,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+knitr::include_graphics("./output/coxph_model_ba2_ba5_vs.png")
+
+
+```
+
+### Sensitivity Analysis of the Cox Model comparing BA5 with BA2
+
+This is an additive model which assumes that the vaccine has the same impact on BA2 as on BA5.  The analysis is based upon sequenced BA2 and BA5 positive cases from 12th May to 8th June. 
+
+```{r cox_model_ba2_ba5_wk45, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant_ba2_ba5_wk45.csv"))
+kableExtra::kbl(z_tab, 
+        caption = "Person years and numbers of covid hospitalisations by variant", 
+        align = c("l", "r", "r", "r"), digits=c(NA, 0,0,0,1) ) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+z <- readRDS("./output/coxph_model_ba2_ba5_wk45.rds")
+z1 <- summary(z)$conf.int %>% as.data.frame()
+colnames(z1) <- c("hr","x","lcl","ucl")
+z1 <- z1 %>% mutate(names=rownames(z1)) %>% filter(!grepl("ps\\(", names)) %>% 
+  filter(!is.na(hr)) %>% dplyr::select(-x) %>% dplyr::relocate(names, .before=hr)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 and BA5 cases only", 
+        align = c("l", rep("r",3)), digits=c(NA,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+
+knitr::include_graphics("./output/coxph_model_ba2_ba5_wk45.png")
+
+
+```
+
+This is an additive model which assumes that the vaccine has the same impact on BA2 as on BA5.  The analysis is based upon sequenced BA2 and BA5 positive cases from 9th June to `r format(output_list$a_end_hosp_expected, "%d %b %Y")` . 
+
+```{r cox_model_ba2_ba5_wk67, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant_ba2_ba5_wk67.csv"))
+kableExtra::kbl(z_tab, 
+        caption = "Person years and numbers of covid hospitalisations by variant", 
+        align = c("l", "r", "r", "r"), digits=c(NA, 0,0,0,1) ) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+z <- readRDS("./output/coxph_model_ba2_ba5_wk67.rds")
+z1 <- summary(z)$conf.int %>% as.data.frame()
+colnames(z1) <- c("hr","x","lcl","ucl")
+z1 <- z1 %>% mutate(names=rownames(z1)) %>% filter(!grepl("ps\\(", names)) %>% 
+  filter(!is.na(hr)) %>% dplyr::select(-x) %>% dplyr::relocate(names, .before=hr)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 and BA5 cases only", 
+        align = c("l", rep("r",3)), digits=c(NA,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+
+knitr::include_graphics("./output/coxph_model_ba2_ba5_wk67.png")
+
+
+```
+
+
+## Covid Hospital Admission within 14 days of a positive test
+
+
+### Covid Hospitalisations within 14 days of a positive test all who tested positive by variant
+
+Admission to hospital comes from the RAPID database of hospital admissions.  This uses a correction to merge records wwhere an individual has a discharge date and subsequent admission date on the same day and to impute discharge dates for admissions which have an admission date but no discharge date and a subsequent admission. 
+Individuals were not in hospital at the time of sequenced test, event is an admission to hospital within 14 days of the test or the positive test was carried out days 1 or 2 after admission, pyears gives the total follow up time in years. n is the number of individuals and rate_100 is the event rate per 100 person years follow up.
+
+```{r table_hosp_variant_14days, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant_14days.csv"))
+kableExtra::kbl(z_tab, 
+        caption = "Person years and numbers of covid hospitalisations by variant", 
+        align = c("l", "r", "r", "r"), digits=c(NA, 0,0,0,1) ) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+```
+
+###Time to hospital admission (14 days of a positive test) by variant
+
+Individuals are not in hospital at the time of test.  They also link into the EAVE study.
+
+```{r graph_cuminc_variant_14days, echo=FALSE, warning=FALSE, message = FALSE}
+
+knitr::include_graphics("./output/cuminc_variant_14days.png")
+
+```
+
+
+### Hospitalisation Rates within 14 days of a positive test by age group and variant
+
+Individuals are not in hospital at the time of test.They also link into the EAVE study.
+
+```{r table_hosp_variant_age_14days, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant_age_14days.csv"))
+z_tab <- z_tab %>% dplyr::select(-x, -pt, -rate, - conf.level)
+kableExtra::kbl(z_tab, 
+        caption = "Person years, numbers and rate of covid hospitalisations, 14 days of a positive test, by variant", 
+        align = c("l","l", rep("r",6)), digits=c(NA,NA,1,0, 0,2,2,2),
+        col.names = c("Variant", "Age Group","Person Years", "N","Hospital Admissions",
+                      "Rate per 100 person years","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+```
+
+###Rate of hospital admission within 14 days of a positive test by Variant and Age Group
+
+Individuals are not in hospital at the time of test. They also link into the EAVE study.
+
+```{r graph_rate_variant_age_14days, echo=FALSE, warning=FALSE, message = FALSE}
+
+knitr::include_graphics("./output/rate_variant_age_14days.png")
+
+```
+
+## Expected Hopitalisations, 14 days of a positive test
+
+### Expected ba4 and ba5 Hospitalisations within 14 days of a positive test among those who are sequenced
+
+Individuals were not in hospital at the time of test.  
+
+The expected numbers of hospitalisations were calculated by fitting a cox proportional hazards regression model to the ba2 cases only in the study period using predictors of age group, gender, deprivation, previous positive history, number of co-morbid Q Covid conditions, vaccine status, dose and duration, and a temporal trend in 2 week periods (labelled weeks in table).  The expected number of cases is derived from the predictions of expected survival from the model in all cases.  Hence the expected number of hospitalisations in the ba2 variant group will match the observed.  Confidence intervals are derived from Byar's method. 
+
+The table below is based upon the same selection criteria used to select the cases to fit the model. Namely not in hospital at the time of test; linking into the EAVE-II study for risk group and deprivation status.
+
+```{r table_hosp_variant_exp_14days, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant_exp_hosp_eave_14days.csv"))
+kableExtra::kbl(z_tab, 
+        caption = "Person years, numbers and expected numbers of hospitalisations within 14 days of a positve test by variant", 
+        align = c("l", rep("r",7)), digits=c(NA,0, 1,0, 1,2,2,2),
+        col.names = c("S Gene","N","Person Years","Hospital Admissions","Expected Admissions",
+                      "Obs/Exp","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+```
+
+
+
+### Details of the Cox Model
+
+```{r cox_model_14days, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- readRDS("./output/coxph_model_ba2_14days.rds")
+z1 <- summary(z)$conf.int %>% as.data.frame()
+colnames(z1) <- c("hr","x","lcl","ucl")
+z1 <- z1 %>% mutate(names=rownames(z1)) %>% filter(!grepl("ps\\(", names)) %>% 
+  filter(!is.na(hr)) %>% dplyr::select(-x) %>% dplyr::relocate(names, .before=hr)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 cases only", 
+        align = c("l", rep("r",3)), digits=c(NA,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+
+knitr::include_graphics("./output/coxph_model_ba2_14days.png")
+
+
+```
+
+## Direct comparison of BA5 with BA2
+
+Individuals were not in hospital at the time of test.  
+
+A cox proportional hazards regression model was fit to the BA2 and BA5 cases only in the study period from 14 April to `r format(output_list$a_end_hosp_14days_expected, "%d %b %Y")` using predictors of age group, gender, deprivation, previous positive history, number of co-morbid Q Covid conditions, vaccine status, dose and duration, and a temporal trend in 2 week periods (labelled weeks in table).  
+
+The same selection criteria is used as in the observed expected analysis but over a shorter time period when both BA2 and BA5 were circulating and hospital admission data is leikely to be complete. Namely not in hospital at the time of test; linking into the EAVE-II study for risk group and deprivation status.
+
+### Details of the Cox Model comparing BA5 with BA2
+
+This is an additive model which assumes that the vaccine has the same impact on BA2 as on BA5.  The results suggest that BA5 is about 26% more severe than BA2 but the confidence interval just encompases 1 and is relatively imprecisely estimated.   
+
+```{r cox_model_ba2_ba5_14days, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- readRDS("./output/coxph_model_ba2_ba5_14days.rds")
+z1 <- summary(z)$conf.int %>% as.data.frame()
+colnames(z1) <- c("hr","x","lcl","ucl")
+z1 <- z1 %>% mutate(names=rownames(z1)) %>% filter(!grepl("ps\\(", names)) %>% 
+  filter(!is.na(hr)) %>% dplyr::select(-x) %>% dplyr::relocate(names, .before=hr)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 and BA5 cases only", 
+        align = c("l", rep("r",3)), digits=c(NA,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+
+knitr::include_graphics("./output/coxph_model_ba2_ba5_14days.png")
+
+z_anova <- readRDS(paste0("./output/coxph_model_ba2_ba5_vs_interaction_14days.rds"))
+z_p <- z_anova$`P(>|Chi|)`[2]
+
+```
+
+### Details of the Cox Model comparing the vaccine effects in BA5 with BA2
+
+This is an interaction model which assumes that the vaccine has a different impact on BA5 compared to BA2. There is no significant interaction, p=`r round(z_p,3)`.  
+
+```{r cox_model_ba2_ba5_vs_14days, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- readRDS("./output/coxph_model_ba2_ba5_vs_14days.rds")
+z1 <- summary(z)$conf.int %>% as.data.frame()
+colnames(z1) <- c("hr","x","lcl","ucl")
+z1 <- z1 %>% mutate(names=rownames(z1)) %>% filter(!grepl("ps\\(", names)) %>% 
+  filter(!is.na(hr)) %>% dplyr::select(-x) %>% dplyr::relocate(names, .before=hr)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 and BA5 cases only", 
+        align = c("l", rep("r",3)), digits=c(NA,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+
+knitr::include_graphics("./output/coxph_model_ba2_ba5_vs_14days.png")
+
+
+```
+
+## Covid Death on the death certificate
+
+
+### Confirmed Covid Death among all who tested positive by variant
+
+Admission to hospital comes from the RAPID database of hospital admissions.  This uses a correction to merge records wwhere an individual has a discharge date and subsequent admission date on the same day and to impute discharge dates for admissions which have an admission date but no discharge date and a subsequent admission. 
+Individuals were not in hospital at the time of sequenced test using the RAPID data base for hospital admissions, event is covid mentioned in any part of the death certificate - most have covid as the main cause of death, pyears gives the total follow up time in years. n is the number of individuals and rate_100 is the event rate per 100 person years follow up.
+
+```{r table_variant_death, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant_death.csv"))
+kableExtra::kbl(z_tab, 
+        caption = "Person years and numbers of confirmed covid deaths by variant", 
+        align = c("l", "r", "r", "r"), digits=c(NA, 0,0,0,1) ) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+```
+
+###Time to confirmed covid death by variant
+
+Individuals are not in hospital at the time of test.  They also link into the EAVE study.
+
+```{r graph_cuminc_variant_death, echo=FALSE, warning=FALSE, message = FALSE}
+
+knitr::include_graphics("./output/cuminc_variant_death.png")
+
+```
+
+
+### Confirmed Covid Death Rates by age group and variant
+
+Individuals are not in hospital at the time of test.  They also link into the EAVE study.
+
+```{r table_variant_age_death, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant_age_death.csv"))
+z_tab <- z_tab %>% dplyr::select(-x, -pt, -rate, - conf.level)
+kableExtra::kbl(z_tab, 
+        caption = "Person years, numbers and rate of confirmed covid death, by variant", 
+        align = c("l","l", rep("r",6)), digits=c(NA,NA,1,0, 0,2,2,2),
+        col.names = c("Variant", "Age Group","Person Years", "N","Deaths",
+                      "Rate per 100 person years","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+```
+
+###Rate of confirmed covid death by Variant and Age Group
+
+Individuals are not in hospital at the time of test. They also link into the EAVE study.
+
+```{r graph_rate_variant_age_death, echo=FALSE, warning=FALSE, message = FALSE}
+
+knitr::include_graphics("./output/rate_variant_age_death.png")
+
+```
+
+## Expected Covid Deaths
+
+### Expected ba4 and ba5 confirmed covid deaths among those who are sequenced
+
+Individuals were not in hospital at the time of test.  Study period from 14 April to `r format(output_list$a_end_deaths, "%d %b %Y")`.
+
+The expected numbers of hospitalisations were calculated by fitting a cox proportional hazards regression model to the ba2 cases only in the study period using predictors of age, fitted as a spline curve, gender, deprivation, previous positive history, number of co-morbid Q Covid conditions, shielding status and immuno compromised status, vaccine status, dose and duration, and a temporal trend fitted as a spline curve.  The expected number of cases is derived from the predictions of expected survival from the model in all cases.  Hence the expected number of hospitalisations in the ba2 variant group will match the observed.  Confidence intervals are derived from Byar's method. 
+
+The table below is based upon the same selection criteria used to select the cases to fit the model. Namely not in hospital at the time of test; linking into the EAVE-II study for risk group and deprivation status.
+
+```{r table_death_variant_exp, echo=FALSE, warning=FALSE, message = FALSE}
+
+z_tab <- read_csv(paste0("./output/pyears_by_variant_exp_death_eave.csv"))
+kableExtra::kbl(z_tab, 
+        caption = "Person years, numbers and expected numbers of confirmed covid deaths by variant", 
+        align = c("l", rep("r",7)), digits=c(NA,0, 1,0, 1,2,2,2),
+        col.names = c("Variant","N","Person Years","Covid Deaths","Expected Deaths",
+                      "Obs/Exp","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+```
+
+
+
+### Details of the Cox Model
+
+```{r cox_model_death, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- readRDS("./output/coxph_model_ba2_death.rds")
+z1 <- summary(z)$conf.int %>% as.data.frame()
+colnames(z1) <- c("hr","x","lcl","ucl")
+z1 <- z1 %>% mutate(names=rownames(z1)) %>% filter(!grepl("ps\\(", names)) %>% 
+  filter(!is.na(hr)) %>% dplyr::select(-x) %>% dplyr::relocate(names, .before=hr)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 cases only", 
+        align = c("l", rep("r",3)), digits=c(NA,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+knitr::include_graphics("./output/coxph_model_ba2_death.png")
+
+```
+
+## Direct comparison of BA5 with BA2
+
+Individuals were not in hospital at the time of test.  
+
+A cox proportional hazards regression model was fit to the BA2 and BA5 cases only in the study period from 14 April to `r format(output_list$a_end_deaths, "%d %b %Y")` using predictors of age, fitted as a spline curve, gender, deprivation, previous positive history, number of co-morbid Q Covid conditions, shielding status and immuno compromised status, vaccine status, dose and duration, and a temporal trend fitted as a spline curve.  
+
+The same selection criteria is used as in the observed expected analysis but over a shorter time period when both BA2 and BA5 were circulating and hospital admission data is leikely to be complete. Namely not in hospital at the time of test; linking into the EAVE-II study for risk group and deprivation status.
+
+### Details of the Cox Model comparing BA5 with BA2
+
+This is an additive model which assumes that the vaccine has the same impact on BA2 as on BA5.  The results suggest that BA5 no more severe than BA2 but the confidence interval  encompases 1 and is  imprecisely estimated.   
+
+```{r cox_model_ba2_ba5_death, echo=FALSE, warning=FALSE, message = FALSE}
+
+z <- readRDS("./output/coxph_model_ba2_ba5_death.rds")
+z1 <- summary(z)$conf.int %>% as.data.frame()
+colnames(z1) <- c("hr","x","lcl","ucl")
+z1 <- z1 %>% mutate(names=rownames(z1)) %>% filter(!grepl("ps\\(", names)) %>% 
+  filter(!is.na(hr)) %>% dplyr::select(-x) %>% dplyr::relocate(names, .before=hr)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 and BA5 cases only", 
+        align = c("l", rep("r",3)), digits=c(NA,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+knitr::include_graphics("./output/coxph_model_ba2_ba5_death.png")
+
+```
+
+## Matched Analysis
+
+```{r matched, echo=FALSE, warning=FALSE, message = FALSE}
+matched_output_list <- readRDS("./output/temp/BA2_BA5_matched_output_list.rds")
+matched_results_list <- readRDS("./output/matched_analysis_covid_admission.rds")
+```
+
+This is the analysis of `r matched_output_list$endpoint`  from `r format(matched_output_list$a_begin_analysis,"%d %M")` to `r format(matched_output_list$a_end_analysis,"%d %M")`.  Each BA5 sequenced case on a particular date is matched to one BA2 case with was collected on the same date, processed in the same type of lab - NHS or lighthouse - and came from someone whose age was in the same 5 year age group.  The analysis was by matched logistic regression adjusting for sex, deprivation, number of clinical risk group, shielding, immunosuppressed, previous test positivity and vaccine status.  The results presented are the average of `r matched_output_list$nsims` random matches to account for the sampling variation in the matching process.  The results for the OR are the exponent of the mean log(OR) over the samples and thefirst set of confidence intervals take into account the sampling variation in the different estimates whereas the second set do not.
+
+```{r matched_table, echo=FALSE, warning=FALSE, message = FALSE}
+kableExtra::kbl(matched_results_list$table, 
+        caption = "Average numbers of events and cases in the matched analysis for BA2 and BA5 cases only", 
+        align = c("l", rep("r",2)), digits=c(NA,0,0),
+        col.names = c("Variant", "Covid Admission","N")) %>%
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+
+z1 <- matched_results_list$coefficients
+#calcualte the CI without the addition of the sampling variability 
+z1 <- z1 %>% mutate(lcl =exp(coef - 1.96*sqrt(var_coef)),ucl =exp(coef + 1.96*sqrt(var_coef)) ) %>% 
+  dplyr::select(names, OR, LCL, UCL, lcl, ucl,)
+kableExtra::kbl(z1, 
+        caption = "Hazard ratios from cox model for BA2 and BA5 cases only", 
+        align = c("l", rep("r",5)), digits=c(NA,2,2,2,2,2),
+        col.names = c("Covariates", "HR","LCL","UCL","lcl","ucl")) %>%
+  kableExtra::add_header_above(c(" "=2,"CI including Sampling"=2,"CI excluding Sampling"=2)) %>% 
+    kableExtra::kable_classic(full_width = F, html_font = "Cambria", position = "left")
+```
