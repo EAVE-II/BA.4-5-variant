@@ -23,14 +23,14 @@ library(flextable)
 
 Location = '/conf/'
 
-setwd(paste0(Location, 'EAVE/GPanalysis/progs/CR/Variants_Sequencing'))
+setwd(paste0(Location, 'EAVE/GPanalysis/analyses/BA.4-5-variant'))
 
 ######### 1 Load data #######
 
 output_list <- readRDS("./output/temp/output_list_analysis.rds") 
 
 
-source('./00_functions.R')
+source('./code/00_functions.R')
 
 ```
 
@@ -54,7 +54,7 @@ Only cases and sequenced cases who link into the EAVE-II data cohort are used.  
 
 ```{r table_pop, echo=FALSE, warning=FALSE, message = FALSE}
 
-z <- read_csv(paste0("./output/comparison_table_population.csv"))
+z <- read_csv(paste0("../output/comparison_table_population.csv"))
 z$Characteristic <- replace_na(z$Characteristic, '') 
 
 #mytable(summary_tbl_sg)
@@ -73,7 +73,7 @@ This table shows differences over the two periods  In the later period more fema
 
 ```{r table_period, echo=FALSE, warning=FALSE, message = FALSE}
 
-z <- read_csv(paste0("./output/comparison_table_pos_seq.csv"))
+z <- read_csv(paste0("../output/comparison_table_pos_seq.csv"))
 z$Characteristic <- replace_na(z$Characteristic, '') 
 
 #mytable(summary_tbl_sg)
